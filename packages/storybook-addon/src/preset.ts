@@ -224,6 +224,27 @@ function mergeViteConfig(
         preventAssignment: true,
       }),
       nuxtRuntimeConfigPlugin(nuxt.options.runtimeConfig),
+      // Intercept nitro.client.mjs to provide a safe useRuntimeConfig fallback.
+      // Nuxt's paths.mjs calls useRuntimeConfig().app.cdnURL at ESM import time,
+      // before preview.mjs sets window.__NUXT__, causing crashes in Storybook.
+      // See https://github.com/nuxt-modules/storybook/issues/753
+      {
+        name: 'storybook-nuxt-init',
+        enforce: 'pre' as const,
+        resolveId(id: string) {
+          if (
+            id.endsWith('nitro.client.mjs') ||
+            id.includes('nitro.client.mjs')
+          ) {
+            return '\0storybook-nitro-client'
+          }
+        },
+        load(id: string) {
+          if (id === '\0storybook-nitro-client') {
+            return 'export const useRuntimeConfig = () => window?.__NUXT__?.config || { app: { cdnURL: "", baseURL: "/", buildAssetsDir: "/_nuxt/" }, public: {} }'
+          }
+        },
+      },
     ],
     server: {
       cors: true,
