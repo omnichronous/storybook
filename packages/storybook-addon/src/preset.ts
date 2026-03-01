@@ -224,6 +224,27 @@ function mergeViteConfig(
         preventAssignment: true,
       }),
       nuxtRuntimeConfigPlugin(nuxt.options.runtimeConfig),
+      // Fix HMR crash when loadNuxt runs with dev:false.
+      // @vitejs/plugin-vue emits __VUE_HMR_RUNTIME__ self-accept code, but
+      // the runtime is never initialized without dev mode. Replace the broken
+      // accept handler with import.meta.hot.invalidate() for a full reload.
+      // See https://github.com/nuxt-modules/storybook/issues/891
+      {
+        name: 'storybook-vue-hmr-fix',
+        enforce: 'post' as const,
+        transform(code: string, id: string) {
+          if (!id.endsWith('.vue') && !id.includes('.vue?')) return
+          if (!code.includes('__VUE_HMR_RUNTIME__')) return
+          if (id.includes('node_modules')) return
+          const re =
+            /import\.meta\.hot\.accept\(\(mod\) => \{[\s\S]*?__VUE_HMR_RUNTIME__[\s\S]*?\n\}\);/g
+          const transformed = code.replace(
+            re,
+            'import.meta.hot.accept(() => { import.meta.hot.invalidate(); });',
+          )
+          if (transformed !== code) return transformed
+        },
+      },
     ],
     server: {
       cors: true,
